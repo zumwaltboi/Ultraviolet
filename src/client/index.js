@@ -17,12 +17,30 @@ import EventEmitter from 'events';
 import StorageApi from './storage.js';
 import StyleApi from './dom/style.js';
 import IDBApi from './idb.js';
+import WebSocketApi from './requests/websocket.js';
+
+/**
+ * @template {Function} [T=Function]
+ * @typedef {(fn: T, that: any, args: any[]) => {}} WrapFun
+ */
+
+/**
+ * @typedef {object} WrapPropertyDescriptor
+ * @property {WrapFun} [get]
+ * @property {WrapFun} [set]
+ */
 
 class UVClient extends EventEmitter {
-    constructor(window = self, worker = !window.window) {
+    /**
+     *
+     * @param {typeof globalThis} window
+     * @param {import('@tomphttp/bare-client').BareClient} bareClient
+     * @param {boolean} worker
+     */
+    constructor(window = self, bareClient, worker = !window.window) {
         super();
         /**
-         * @type {typeof self}
+         * @type {typeof globalThis}
          */
         this.window = window;
         this.nativeMethods = {
@@ -42,6 +60,7 @@ class UVClient extends EventEmitter {
             Proxy: this.window.Proxy,
         };
         this.worker = worker;
+        this.bareClient = bareClient;
         this.fetch = new Fetch(this);
         this.xhr = new Xhr(this);
         this.idb = new IDBApi(this);
@@ -51,6 +70,7 @@ class UVClient extends EventEmitter {
         this.document = new DocumentHook(this);
         this.function = new FunctionHook(this);
         this.object = new ObjectHook(this);
+        this.websocket = new WebSocketApi(this);
         this.message = new MessageApi(this);
         this.navigator = new NavigatorApi(this);
         this.eventSource = new EventSourceApi(this);
@@ -61,20 +81,12 @@ class UVClient extends EventEmitter {
         this.storage = new StorageApi(this);
         this.style = new StyleApi(this);
     }
-    initLocation(rewriteUrl, sourceUrl) {
-        this.location = new LocationApi(
-            this,
-            sourceUrl,
-            rewriteUrl,
-            this.worker
-        );
-    }
     /**
      *
      * @param {*} obj
-     * @param {*} prop
+     * @param {PropertyKey} prop
      * @param {WrapFun} wrapper
-     * @param {*} construct
+     * @param {boolean} [construct]
      * @returns
      */
     override(obj, prop, wrapper, construct) {
@@ -83,26 +95,30 @@ class UVClient extends EventEmitter {
         obj[prop] = wrapped;
         return wrapped;
     }
+    /**
+     *
+     * @param {*} obj
+     * @param {PropertyKey} prop
+     * @param {WrapPropertyDescriptor} [wrapObj]
+     * @returns
+     */
     overrideDescriptor(obj, prop, wrapObj = {}) {
         const wrapped = this.wrapDescriptor(obj, prop, wrapObj);
         if (!wrapped) return {};
         this.nativeMethods.defineProperty(obj, prop, wrapped);
         return wrapped;
     }
-    /**
-     * @template {Function} [T=Function]
-     * @typedef {(fn: T, that: any, args: any[]) => {}} WrapFun
-     */
+
     /**
      *
      * @template T
      * @param {*} obj
-     * @param {*} prop
+     * @param {PropertyKey} prop
      * @param {WrapFun<T>} wrap
-     * @param {boolean} construct
+     * @param {boolean} [construct]
      * @returns {T}
      */
-    wrap(obj, prop, wrap, construct) {
+    wrap(obj, prop, wrap, construct = false) {
         const fn = obj[prop];
         if (!fn) return fn;
         const wrapped =
@@ -121,10 +137,17 @@ class UVClient extends EventEmitter {
             wrapped.prototype.constructor = wrapped;
         }
 
-        this.emit('wrap', fn, wrapped, !!construct);
+        this.emit('wrap', fn, wrapped, construct);
 
         return wrapped;
     }
+    /**
+     *
+     * @param {*} obj
+     * @param {PropertyKey} prop
+     * @param {WrapPropertyDescriptor} [wrapObj]
+     * @returns
+     */
     wrapDescriptor(obj, prop, wrapObj = {}) {
         const descriptor = this.nativeMethods.getOwnPropertyDescriptor(
             obj,

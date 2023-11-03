@@ -213,7 +213,7 @@ class UVServiceWorker extends Ultraviolet.EventEmitter {
                                 .join(',');
                             responseCtx.body = `if (!self.__uv && self.importScripts) { ${ultraviolet.createJsInject(
                                 this.address,
-                                this.bareClient.data,
+                                this.bareClient.manifest,
                                 ultraviolet.cookie.serialize(
                                     cookies,
                                     ultraviolet.meta,
@@ -249,7 +249,7 @@ class UVServiceWorker extends Ultraviolet.EventEmitter {
                                         ultraviolet.clientScript,
                                         ultraviolet.configScript,
                                         this.address,
-                                        this.bareClient.data,
+                                        this.bareClient.manifest,
                                         ultraviolet.cookie.serialize(
                                             cookies,
                                             ultraviolet.meta,
@@ -265,6 +265,10 @@ class UVServiceWorker extends Ultraviolet.EventEmitter {
 
             if (requestCtx.headers.accept === 'text/event-stream') {
                 responseCtx.headers['content-type'] = 'text/event-stream';
+            }
+            if (crossOriginIsolated) {
+                responseCtx.headers['Cross-Origin-Embedder-Policy'] =
+                    'require-corp';
             }
 
             this.emit('response', resEvent);
@@ -502,7 +506,7 @@ function errorTemplate(
         '<ul>' +
         '<li>Restarting your Bare server</li>' +
         '<li>Updating Ultraviolet</li>' +
-        '<li>Troubleshooting the error on the <a href="https://github.com/titaniumnetwork-dev/Ultraviolet">GitHub repository</a></li>' +
+        '<li>Troubleshooting the error on the <a href="https://github.com/titaniumnetwork-dev/Ultraviolet" target="_blank">GitHub repository</a></li>' +
         '</ul>' +
         '<button id="reload">Reload</button>' +
         '<hr />' +
